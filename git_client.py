@@ -284,13 +284,18 @@ class GitClient:
                     repo_name = self.repo_path.name
                     pr_url = f"https://github.com/local/{repo_name}/pull/{pr_num}"
 
+                actual_author = pr_commits[-1].author_name if pr_commits else author_name
+                actual_email = pr_commits[-1].author_email if pr_commits else author_email
+                pr_date = pr_commits[-1].date if pr_commits and pr_commits[-1].date else date_str
+
                 prs.append(PRInfo(
                     number=pr_num,
                     title=title,
                     url=pr_url,
-                    creator_login=author_name,
-                    creator_name=author_name,
-                    created_at=date_str,
+                    creator_login=actual_author,
+                    creator_name=actual_author,
+                    creator_email=actual_email,
+                    created_at=pr_date,
                     merged_by_login=author_name,
                     merged_at=date_str,
                     state="closed",

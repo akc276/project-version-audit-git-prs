@@ -166,15 +166,25 @@ def is_within_days(dt_str: Optional[str], days: int, reference_time: Optional[da
 
 def matches_any_filter(target_text: Optional[str], filters: Iterable[str]) -> bool:
     """
-    Checks if target_text matches any filter pattern (case-insensitive substring match).
+    Checks if target_text matches any filter pattern:
+    - Case-insensitive substring in either direction (e.g. 'ankit' in 'ankit kumar', or 'ankit kumar' matches 'ankit')
+    - Tokenized word matching (e.g. 'ankit.kr.chahal@company.com' matches 'Ankit Chahal' or 'Ankit Kumar Chahal')
     """
-    if not target_text:
+    if not target_text or not filters:
         return False
     target_lower = target_text.strip().lower()
+    target_tokens = set(re.split(r"[\s._\-+@]+", target_lower))
+
     for flt in filters:
-        flt_clean = flt.strip().lower()
+        flt_clean = flt.strip().strip("'\"").lower()
         if not flt_clean:
             continue
-        if flt_clean in target_lower:
+        # Direct bidirectional substring
+        if flt_clean in target_lower or (len(target_lower) >= 3 and target_lower in flt_clean):
             return True
+        # Token-based match: check non-trivial words (>= 3 chars)
+        flt_tokens = [t for t in re.split(r"[\s._\-+@]+", flt_clean) if len(t) >= 3]
+        for t in flt_tokens:
+            if t in target_tokens or any(t in tok for tok in target_tokens):
+                return True
     return False

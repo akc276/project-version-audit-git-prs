@@ -109,11 +109,11 @@ class AuditConfig:
     github_organization: str = "CHANGE_ME"
     github_token_env: str = "GITHUB_TOKEN"
     repository_name_filters: List[str] = field(default_factory=lambda: ["service"])
-    repository_contributor_filters: List[str] = field(default_factory=lambda: ["ankit", "@company.com"])
+    repository_contributor_filters: List[str] = field(default_factory=lambda: ["ankit"])
     repository_contributor_history_scope: ContributorHistoryScope = ContributorHistoryScope.LOOKBACK
     days: int = 3
-    author_filters: List[str] = field(default_factory=lambda: ["ankit", "@company.com"])
-    author_matching_mode: AuthorMatchingMode = AuthorMatchingMode.PR_CREATOR
+    author_filters: List[str] = field(default_factory=lambda: ["ankit"])
+    author_matching_mode: AuthorMatchingMode = AuthorMatchingMode.BOTH
     author_filters_match_against: AuthorMatchTarget = AuthorMatchTarget.BOTH
     branches: List[str] = field(default_factory=lambda: ["test", "preprod"])
     pr_lookup_mode: PRLookupMode = PRLookupMode.CREATED_WITHIN_DAYS
@@ -128,6 +128,7 @@ class AuditConfig:
     contributor_count_mode: ContributorCountMode = ContributorCountMode.COMMIT_AUTHORS_AND_PR_CREATOR
     jira_sources: str = "all"
     fetch_before_scan: bool = True
+    parallel_fetch_workers: int = 8
     log_file: Path = field(default_factory=lambda: Path("output/audit.log"))
     csv_report: Path = field(default_factory=lambda: Path("output/audit_report.csv"))
     xlsx_report: Path = field(default_factory=lambda: Path("output/audit_report.xlsx"))
@@ -194,6 +195,7 @@ class PRInfo:
     head_sha: str
     is_merged: bool
     body: str = ""
+    creator_email: str = ""
     commits: List[CommitInfo] = field(default_factory=list)
     changed_files: List[str] = field(default_factory=list)
 

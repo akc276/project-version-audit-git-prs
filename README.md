@@ -7,7 +7,7 @@ Before running **git-audit-tool**, you must edit only the following values:
 2. **`config.yaml`**:
    - `github_organization`: Replace `CHANGE_ME` with your GitHub organization or username (e.g. `my-org`).
    - `root_folder`: If using local mode, set this to your repositories directory (e.g. `D:\Cariad\Repos` or `/Users/name/repos`).
-   - `author_filters`: Set the developer usernames or email domains to audit (e.g. `["ankit", "@company.com"]`).
+   - `author_filters`: Set your name, username, or email to audit (e.g. `["ankit"]` or `["ankit.kr.chahal@company.com"]`). You only need your own identifier—no dummy domains needed.
    - `branches`: Set the target branches to audit PRs against (e.g. `["test", "preprod", "main"]`).
 
 ---

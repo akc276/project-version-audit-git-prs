@@ -7,6 +7,7 @@ contributor metrics, and Jira traceability with real-time CSV and XLSX streaming
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import logging
 import os
@@ -116,7 +117,10 @@ class GitAuditOrchestrator:
                 self._print_summary(time.time() - start_time)
                 return 0
 
-            # 2. Process each repository
+            # 2. Parallel Asynchronous Pre-fetch across local repositories
+            self._prefetch_repositories_parallel(repositories)
+
+            # 3. Process each repository
             for repo in repositories:
                 self._audit_repository(repo)
 
@@ -132,6 +136,44 @@ class GitAuditOrchestrator:
         self._print_summary(duration)
         return 0 if self.error_count == 0 else 1
 
+    def _prefetch_repositories_parallel(self, repositories: List[RepoTarget]) -> None:
+        """Fetches all local repositories in parallel using background worker threads."""
+        if not self.config.fetch_before_scan:
+            return
+
+        local_repos = [r for r in repositories if r.local_path and Path(r.local_path).exists()]
+        if not local_repos:
+            return
+
+        workers = max(1, min(len(local_repos), self.config.parallel_fetch_workers))
+        logger.info("==================================================")
+        logger.info(
+            "Starting parallel asynchronous pre-fetch on %d local repositories (workers=%d)...",
+            len(local_repos), workers,
+        )
+        if self.report_writer:
+            self.report_writer.update_status_message(
+                f"Pre-fetching {len(local_repos)} repositories in parallel..."
+            )
+
+        def _fetch_single_repo(target: RepoTarget) -> tuple[str, bool]:
+            try:
+                client = GitClient(target.local_path)
+                success = client.fetch_all()
+                return target.full_name, success
+            except Exception as ex:
+                logger.warning("Background fetch failed for %s: %s", target.full_name, ex)
+                return target.full_name, False
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_to_repo = {executor.submit(_fetch_single_repo, repo): repo for repo in local_repos}
+            for future in as_completed(future_to_repo):
+                repo_name, success = future.result()
+                logger.debug("Parallel fetch finished for %s (success=%s)", repo_name, success)
+
+        logger.info("Completed parallel pre-fetch for all local repositories.")
+        logger.info("==================================================")
+
     def _audit_repository(self, repo: RepoTarget) -> None:
         """Run audit checks against a single repository."""
         logger.info("--------------------------------------------------")
@@ -142,13 +184,16 @@ class GitAuditOrchestrator:
         git_client: Optional[GitClient] = None
         if repo.local_path and Path(repo.local_path).exists():
             git_client = GitClient(repo.local_path)
-            if self.config.fetch_before_scan:
-                logger.info("Running git fetch on %s before scan...", repo.full_name)
-                git_client.fetch_all()
 
         try:
             prs = self._collect_repository_prs(repo, git_client)
             logger.info("Found %d candidate PR(s) matching branch and author criteria in %s", len(prs), repo.full_name)
+            if not prs:
+                logger.warning(
+                    "No pull requests in %s matched author filters %s with mode '%s'. "
+                    "(Tip: Use '--author-matching-mode both' to check both PR creator and commit contributors/authors)",
+                    repo.full_name, self.config.author_filters, self.config.author_matching_mode.value,
+                )
 
             from version_analyzer import VersionAnalyzer
             analyzer = VersionAnalyzer(self.config, self.github_client)
@@ -229,6 +274,7 @@ class GitAuditOrchestrator:
             url=raw.get("html_url", f"https://{self.config.github_base_url}/{repo.full_name}/pull/{raw.get('number')}"),
             creator_login=user_dict.get("login", ""),
             creator_name=user_dict.get("name") or user_dict.get("login", ""),
+            creator_email=user_dict.get("email") or "",
             created_at=raw.get("created_at", ""),
             merged_by_login=merged_by,
             merged_at=merged_date,
@@ -289,7 +335,7 @@ class GitAuditOrchestrator:
                     or matches_any_filter(email, filters)
                 )
 
-        creator_matched = _check_user(pr.creator_login, pr.creator_name)
+        creator_matched = _check_user(pr.creator_login, pr.creator_name, pr.creator_email)
 
         commits_matched = False
         if matching_mode in (AuthorMatchingMode.COMMIT_AUTHOR, AuthorMatchingMode.BOTH):
@@ -298,14 +344,19 @@ class GitAuditOrchestrator:
                     commits_matched = True
                     break
 
+        matched = False
         if matching_mode == AuthorMatchingMode.PR_CREATOR:
-            return creator_matched
+            matched = creator_matched
         elif matching_mode == AuthorMatchingMode.COMMIT_AUTHOR:
-            return commits_matched
+            matched = commits_matched
         elif matching_mode == AuthorMatchingMode.BOTH:
-            return creator_matched or commits_matched
+            matched = creator_matched or commits_matched
 
-        return False
+        logger.debug(
+            "PR #%d author evaluation [matched=%s, mode=%s]: creator='%s'/'%s'/'%s' (creator_match=%s), commits=%d (commits_match=%s), filters=%s",
+            pr.number, matched, matching_mode.value, pr.creator_login, pr.creator_name, pr.creator_email, creator_matched, len(pr.commits), commits_matched, filters,
+        )
+        return matched
 
     def _audit_pull_request(
         self,
@@ -555,6 +606,22 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--repo-filter", "--repository-name-filter", dest="repo_filter", help="Repository name filter(s), comma-separated")
     parser.add_argument("--property-file", help="Property file name to inspect (e.g. project.properties, gradle.properties)")
     parser.add_argument("--version-key", help="Key name to inspect in property file (e.g. version, springBootVersion)")
+    parser.add_argument(
+        "--parallel-fetch-workers",
+        type=int,
+        default=None,
+        help="Number of concurrent worker threads for pre-fetching local repositories (default: 8)",
+    )
+    parser.add_argument(
+        "--author-matching-mode",
+        choices=["pr_creator", "commit_author", "both"],
+        help="Author matching mode: 'pr_creator', 'commit_author', or 'both'",
+    )
+    parser.add_argument(
+        "--author-match-against",
+        choices=["github_login", "github_name", "both"],
+        help="Match against 'github_login', 'github_name', or 'both'",
+    )
     parser.add_argument("--no-fetch", action="store_true", help="Disable git fetch before scanning")
 
     return parser.parse_args()
@@ -635,6 +702,8 @@ def load_configuration(args: argparse.Namespace) -> AuditConfig:
         cfg.jira_sources = str(raw_cfg["jira_sources"])
     if "fetch_before_scan" in raw_cfg:
         cfg.fetch_before_scan = bool(raw_cfg["fetch_before_scan"])
+    if "parallel_fetch_workers" in raw_cfg:
+        cfg.parallel_fetch_workers = int(raw_cfg["parallel_fetch_workers"])
     if "log_file" in raw_cfg:
         cfg.log_file = Path(raw_cfg["log_file"])
     if "csv_report" in raw_cfg:
@@ -681,6 +750,12 @@ def load_configuration(args: argparse.Namespace) -> AuditConfig:
     if getattr(args, "property_file", None):
         cfg.property_file = args.property_file.strip()
         cfg.property_files = [args.property_file.strip()]
+    if getattr(args, "author_matching_mode", None):
+        cfg.author_matching_mode = AuthorMatchingMode(args.author_matching_mode)
+    if getattr(args, "author_match_against", None):
+        cfg.author_filters_match_against = AuthorMatchTarget(args.author_match_against)
+    if getattr(args, "parallel_fetch_workers", None) is not None:
+        cfg.parallel_fetch_workers = args.parallel_fetch_workers
     if args.no_fetch:
         cfg.fetch_before_scan = False
 

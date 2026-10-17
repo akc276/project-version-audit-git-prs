@@ -13,7 +13,6 @@ repository_name_filters:
 
 repository_contributor_filters:
   - ankit
-  - "@company.com"
 
 repository_contributor_history_scope: lookback
 
@@ -21,9 +20,8 @@ days: 3
 
 author_filters:
   - ankit
-  - "@company.com"
 
-author_matching_mode: pr_creator
+author_matching_mode: both
 
 author_filters_match_against: both
 
