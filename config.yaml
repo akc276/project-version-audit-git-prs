@@ -1,0 +1,68 @@
+root_folder: D:\Cariad\Repos
+
+repository_discovery_mode: local
+
+github_base_url: github.com
+
+github_organization: CHANGE_ME
+
+github_token_env: GITHUB_TOKEN
+
+repository_name_filters:
+  - service
+
+repository_contributor_filters:
+  - ankit
+  - "@company.com"
+
+repository_contributor_history_scope: lookback
+
+days: 3
+
+author_filters:
+  - ankit
+  - "@company.com"
+
+author_matching_mode: pr_creator
+
+author_filters_match_against: both
+
+branches:
+  - test
+  - preprod
+
+pr_lookup_mode: created_within_days
+
+pr_state_filter: opened_by_author
+
+property_file: project.properties
+
+property_match_mode: exact_filename
+
+version_key: version
+
+version_check_mode: pr_raised
+
+version_source_in_pr: merged_head
+
+missing_project_properties_behavior: NA
+
+contributor_count_mode: commit_authors_and_pr_creator
+
+jira_sources: all
+
+fetch_before_scan: true
+
+log_file: output/audit.log
+
+csv_report: output/audit_report.csv
+
+xlsx_report: output/audit_report.xlsx
+
+xlsx_realtime_save: true
+
+xlsx_status_colors: true
+
+progress_file: output/progress.txt
+
+dotenv_file: .env

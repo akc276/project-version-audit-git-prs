@@ -1,0 +1,44 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment and sensitive credential files
+.env
+.env.*
+!.env.example
+*.local.env
+*.token
+*.key
+*.pem
+*.secret
+
+# Execution outputs and logs
+output/
+test_repos/
+*.log
+*.csv
+*.xlsx
+progress.txt
+
+# Testing & build artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# IDE and OS metadata
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
